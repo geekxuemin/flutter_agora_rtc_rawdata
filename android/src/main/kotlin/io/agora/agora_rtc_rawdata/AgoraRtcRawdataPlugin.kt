@@ -6,26 +6,36 @@ import io.agora.rtc.rawdata.base.IAudioFrameObserver
 import io.agora.rtc.rawdata.base.IVideoFrameObserver
 import io.agora.rtc.rawdata.base.VideoFrame
 import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.EventChannel.StreamHandler
+import io.flutter.plugin.common.EventChannel.EventSink
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import java.util.*
+import android.util.Log
 
 /** AgoraRtcRawdataPlugin */
-class AgoraRtcRawdataPlugin : FlutterPlugin, MethodCallHandler {
+class AgoraRtcRawdataPlugin : FlutterPlugin, MethodCallHandler, StreamHandler {
   /// The MethodChannel that will the communication between Flutter and native Android
   ///
   /// This local reference serves to register the plugin with the Flutter Engine and unregister it
   /// when the Flutter Engine is detached from the Activity
   private lateinit var channel: MethodChannel
+  private lateinit var eventChannel: EventChannel
 
   private var audioObserver: IAudioFrameObserver? = null
   private var videoObserver: IVideoFrameObserver? = null
 
+  private var eventSink: EventChannel.EventSink? = null
+
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
     channel = MethodChannel(flutterPluginBinding.binaryMessenger, "agora_rtc_rawdata")
     channel.setMethodCallHandler(this)
+
+    eventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "agore_rtc_rawdata_stream")
+    eventChannel.setStreamHandler(this)
   }
 
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
@@ -34,18 +44,23 @@ class AgoraRtcRawdataPlugin : FlutterPlugin, MethodCallHandler {
         if (audioObserver == null) {
           audioObserver = object : IAudioFrameObserver((call.arguments as Number).toLong()) {
             override fun onRecordAudioFrame(audioFrame: AudioFrame): Boolean {
+              Log.v("agora_rtc_rawdata", "onRecordAudioFrame");
+              onRecordAudioFrameCall(audioFrame)
               return true
             }
 
             override fun onPlaybackAudioFrame(audioFrame: AudioFrame): Boolean {
+              Log.v("agora_rtc_rawdata", "onPlaybackAudioFrame");
               return true
             }
 
             override fun onMixedAudioFrame(audioFrame: AudioFrame): Boolean {
+              Log.v("agora_rtc_rawdata", "onMixedAudioFrame");
               return true
             }
 
             override fun onPlaybackAudioFrameBeforeMixing(uid: Int, audioFrame: AudioFrame): Boolean {
+              Log.v("agora_rtc_rawdata", "onPlaybackAudioFrameBeforeMixing");
               return true
             }
           }
@@ -99,6 +114,21 @@ class AgoraRtcRawdataPlugin : FlutterPlugin, MethodCallHandler {
     // Used to load the 'native-lib' library on application startup.
     init {
       System.loadLibrary("cpp")
+    }
+  }
+
+  override fun onCancel(arguments: Any) {
+    eventSink = null
+  }
+
+  override fun onListen(arguments: Any, events: EventChannel.EventSink) {
+    eventSink = events
+  }
+
+  fun onRecordAudioFrameCall(audioFrame: AudioFrame) {
+    val lEventSink = eventSink;
+    if (lEventSink != null) {
+      lEventSink.success(audioFrame.buffer)
     }
   }
 }
